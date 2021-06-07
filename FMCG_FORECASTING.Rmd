@@ -1,8 +1,16 @@
 ---
-title: "Untitled"
-author: "Daniel"
-date: "6/2/2021"
-output: html_document
+title: "Predicting the sales of FMCG categorical"
+author: "Daniel Lumban Gaol"
+date: "6/07/2021"
+output: 
+  html_document:
+    theme: flatly
+    higlight: zenburn
+    toc: true
+    toc_float:
+      collapsed: false
+    number_sections: true
+    df_print: paged
 ---
 
 
@@ -22,6 +30,16 @@ knitr::opts_chunk$set(
 options(scipen = 999)
 ```
 
+# Case
+
+ A large Indian retail chain has stores across 3 states in India: Maharashtra, Telangana and Kerala. These stores stock products across various categories such as FMCG (fast moving consumer goods), eatables / perishables and others. Managing the inventory is crucial for the revenue stream of the retail chain. Meeting the demand is important to not lose potential revenue, while at the same time stocking excessive products could lead to losses.   
+ 
+```{r, out.width = "100%", echo = FALSE, fig.align = "center"}
+knitr::include_graphics("fmcg.jpg")
+```
+In this case i will building a time series for forcasting the sales of product for one month from fmcg categorical
+
+
 # Library
 
 ```{r}
@@ -38,35 +56,31 @@ library(tseries) # adf.test
 
 # Read Data
 
-```{r}
+This data is obtained from Kaggle, which is product daily sales data from each store in India   
+```{r} 
 fmcg <- read.csv("data.csv")
 glimpse(fmcg)
 ```
 
-Data Description :
-date : date of sales obsevation
-product_identifier : the id for a product
-department_identifier : The id for spesific department in a store
-category_of_product : The category to which a product belongs
-outlet : The id for a store
-state : The name of the state
-sales : The number of sales product
+Data Description :   
+date : date of sales obsevation   
+product_identifier : the id for a product   
+department_identifier : The id for spesific department in a store   
+category_of_product : The category to which a product belongs   
+outlet : The id for a store   
+state : The name of the state   
+sales : The number of sales product   
 
+# Data Wrangling
 ```{r}
 fmcg <- fmcg %>% 
   mutate(category_of_product = as.factor(category_of_product),
          state = as.factor(state),
          date = ymd(date))
-glimpse(fmcg)
-```
-
-
-> Data Agregation
-
-```{r}
 head(fmcg)
 ```
 
+## Data Agregation
 
 From the data set we just concern to sales forecast in fmcg, so we must to get date and sales from fmcg category product
 
@@ -74,8 +88,6 @@ From the data set we just concern to sales forecast in fmcg, so we must to get d
 fmcg_data <- fmcg %>% 
              filter(category_of_product == "fast_moving_consumer_goods") %>% 
              select(date,sales)
-
-fmcg_data
 ```
 
 ```{r}
@@ -86,8 +98,8 @@ daily_fmcg <- fmcg_data %>%
 daily_fmcg
 ```
 
-Data time series yang baik adalah memiliki data yang berurut dan tidak kosong, oleh sebab itu dengan menggunakan pad, akan melakukan pengecekan tiap baris data apakah ada yang kosong atau tidak.
 
+A good time series data is having data that is sequential and not empty, therefore by using a pad, it will check each row of data whether there are blanks or not.
 
 ```{r}
 daily_fmcg %>% filter(sales == 0)
@@ -98,14 +110,12 @@ daily_fmcg <- daily_fmcg[daily_fmcg$sales > 0, ]
 daily_fmcg %>% filter(sales == 0 )
 ```
 
-
-
+change the value of sales 0 to the value of sales on the previous day
 ```{r}
 daily_fmcg %>% 
   arrange(date) %>% 
   pad() %>% 
   na.locf()
-            
 ```
 
 
@@ -120,14 +130,14 @@ fmcg_ts <- ts(data = daily_fmcg$sales,
               frequency = 7) #weekly seasonality
 ```
 
-Pada proses ini saya akan melakukan analisa untuk mengetahui apakah data bersifat seasonal dan trend, satu seasonal atau lebih dari satu seasonal
+In this process I will conduct an analysis to find out whether the data are seasonal and trend, one seasonal or more than one seasonal
 
 ```{r}
 fmcg_decom <- decompose(fmcg_ts)
 autoplot(fmcg_decom)
 ```
 
-Dari hasil plot diatas dapat dikatakan bahwa data memiliki multiseasonal, dan pola data trend menunjukan pola multiseasonal
+From the results of the plot above, it can be said that the data is multiseasonal, and the trend data pattern still shows other seasonal patterns
 
 ```{r}
 #making 2nd ts object
@@ -145,7 +155,7 @@ daily_fmcg$sales %>%
   autoplot()
 ```
 
-objek terakhir adalah dengan melakukan tiga percobaan time series model, dan model time series terakhir adalah model yang cocok dengan dua seasonal dan trend yang memiliki pola turun.
+the last object is to conduct three time series model experiments, and the last time series model is a model that fits two seasonal and downward trends.
 
 ```{r}
 #assign final ts object
@@ -156,10 +166,11 @@ fmcg_msts <- daily_fmcg$sales %>%
 adf.test(fmcg_msts)
 ```
 
-Based on Augmented Dickey-Fuller Test (adf.test) result, the p-value is < alpha and therefore the data is already stationary. Therefore, for a model building using SARIMA, we do not need to perform differencing on the data first.
-
+Based on Augmented Dickey-Fuller Test (adf.test) result, the p-value is < alpha (0.05) and therefore the data is already stationary. Therefore, for a model building using SARIMA, we do not need to perform differencing on the data first.
 
 # Cross Validation
+
+In cross validation I will take test data for the model for one month or four weeks
 
 ```{r}
 fmcg_train <- function(x){
@@ -177,11 +188,11 @@ test_1 <- fmcg_test(fmcg_msts)
 
 # Model Building
 
-Untuk pembuatan model kita akan mengkompare antara ets holt winters dengan Seasonal Arima, karena data memiliki seasonal dan juga trend   
+For modeling we will compare ets holt winters with Seasonal Arima, because the data has seasonal and trend    
 
-Ada salah satu cara untuk mendapatkan decompose data namun tetap mempertahankan informasi dari seluruh data yang kita miliki yaitu dengan menggunakan **STL (Seasonal Trend with Loess)**. STL secara konsep akan melakukan smoothing terhadap data tetangga setiap masing-masing observasi dengan memberikan bobot yang lebih berat terhadap data yang dekat dengan observed data.   
+There is one way to get decomposed data but still maintain information from all the data we have, that is by using **STL (Seasonal Trend with Loess)**. STL will conceptually smooth the neighboring data for each observation by giving a heavier weight to the data that is close to the observed data.  
 
-Untuk memodelkan hasil STL, kita juga dapat menerapkan metode exponential smoothing (ETS) dan ARIMA. Selain itu, STLM dapat digunakan sebagai alternative cara untuk menangkap seasonal yang belum bisa ditangkap oleh metode ETS dan ARIMA biasa. 
+To model the STL results, we can also apply the exponential smoothing (ETS) and ARIMA methods. In addition, STLM can be used as an alternative way to catch seasonal which cannot be caught by the usual ETS and ARIMA methods.
 
 ```{r}
 #ets Holt - Winters
@@ -223,7 +234,7 @@ forecast_list <- list(
 compare_forecast(forecast_list,test_1 )
 ```
 
-> Arima the best modell
+From the comparison results above, Arima produces a smaller MAPE than ETS   
 
 ```{r}
 fmcg_msts %>% 
@@ -252,17 +263,18 @@ TSstudio::test_forecast(actual = fmcg_msts,
 
 
 
->>>>>>>>>>>>>>>>>>>> TEST
+# Predicting
 
+Using model has selected   
 ```{r}
 model_fmcg <- fmcg_msts
 ```
 
 > Data predict
 
+Data test for one month,and we will only choose categorical fmcg and accumulate daily from each store
 ```{r}
 predict <- read.csv("test_data.csv")
-head(predict)
 ```
 
 ```{r}
@@ -282,13 +294,15 @@ predict_forecast <- predict_clean[!duplicated(predict_clean$date),] %>%
 predict_forecast
 ```
 
-# MODEL
+# Model
+
+forecast using the Arima model model   
 
 ```{r}
 arima_model <- stlm(model_fmcg, method = "arima", lambda = 0)
 
 #forecast
-arima_f <- forecast(arima_model, h = 31)
+arima_f <- forecast(arima_model, h = 31)# the day in predict
 ```
 
 ```{r}
@@ -296,7 +310,7 @@ model_fmcg %>%
   autoplot(series = "Actual") +
   autolayer(arima_f$mean, series = "Forecast")
 ```
-# Data frame
+# Data frame predict
 
 ```{r}
 predict_forecast %>% 
@@ -304,6 +318,8 @@ predict_forecast %>%
 ```
 
 
+# Conclutions
+From the results of the analysis above, the data has a multiseasonal pattern, namely quarterly and yearly, and the Arima model is the best model with a 20% MAPE so that the accuracy of the model can be said to be 80% for forecasting.
 
 
 
